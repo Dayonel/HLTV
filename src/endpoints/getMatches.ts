@@ -46,78 +46,100 @@ const getPageUrl = ({ eventIds, eventType, filter, teamIds }: GetMatchesArgument
   return `https://www.hltv.org/matches?${query}`;
 }
 
-const parsePage = (html: string) => {
+interface EventData {
+  id: number | undefined;
+  name: string;
+}
+
+interface Match {
+  id: number;
+  date: number | undefined;
+  stars: number;
+  title: string | undefined;
+  team1: Team | undefined;
+  team2: Team | undefined;
+  format: string;
+  event: EventData | undefined;
+  live: boolean;
+}
+
+export const parsePage = (html: string): Match[] => {
   const $ = cheerio.load(html);
 
-  const events = $('.event-filter-popup a')
+  // Select match elements using the new markup selector.
+  // In the new markup, each match is wrapped in a ".match-wrapper" element.
+  const matches: Match[] = $('.matches-v4 .match-wrapper')
     .toArray()
     .map((el) => {
       const $el = $(el);
 
-      const id = parseNumber($el.attr('href')?.split('=').pop());
-      const name = $el.find('.event-name').text();
+      // Extract match id from "data-match-id" attribute.
+      const id = parseNumber($el.attr('data-match-id')) ?? 0;
+
+      // Extract star rating from "data-stars" attribute.
+      const stars = $el.attr('data-stars') ? parseInt($el.attr('data-stars')!, 10) : 0;
+
+      // Determine if the match is live from the "live" attribute.
+      const live = $el.attr('live') === 'true';
+
+      // Extract date: first try the closest parent with "data-zonedgrouping-entry-unix",
+      // otherwise look for a child element with a data-unix attribute.
+      let date = parseNumber($el.closest('.match-zone-wrapper').attr('data-zonedgrouping-entry-unix'));
+      if (!date) {
+        date = parseNumber($el.find('.match-time [data-unix]').attr('data-unix'));
+      }
+
+      // Extract title from .match-title or .match-info-empty.
+      const titleText =
+        $el.find('.match-title').text().trim() ||
+        $el.find('.match-info-empty').text().trim();
+      const title = titleText.length > 0 ? titleText : undefined;
+
+      // If no title is present, extract team information.
+      let team1: Team | undefined = undefined;
+      let team2: Team | undefined = undefined;
+      if (!title) {
+        const team1Name = $el.find('.match-team.team1 .match-teamname').text().trim();
+        const team2Name = $el.find('.match-team.team2 .match-teamname').text().trim();
+        const team1Id = parseNumber($el.attr('data-team1'));
+        const team2Id = parseNumber($el.attr('data-team2'));
+        if (team1Name) {
+          team1 = { name: team1Name, id: team1Id };
+        }
+        if (team2Name) {
+          team2 = { name: team2Name, id: team2Id };
+        }
+      }
+
+      // Extract format information from .match-meta element.
+      const format = $el.find('.match-meta').text().trim();
+
+      // Extract event information from the .match-event element.
+      let event: EventData | undefined = undefined;
+      const eventElem = $el.find('.match-event');
+      if (eventElem.length) {
+        const eventName = eventElem.attr('data-event-headline')?.trim();
+        const eventId = parseNumber(eventElem.attr('data-event-id'));
+        if (eventName) {
+          event = { id: eventId, name: eventName };
+        }
+      }
 
       return {
         id,
-        name,
-      }
-    })
-    .concat(
-      $('.events-container a')
-        .toArray()
-        .map((el) => {
-          const $el = $(el);
+        date,
+        stars,
+        title,
+        team1,
+        team2,
+        format,
+        event,
+        live,
+      };
+    });
 
-          const id = parseNumber($el.attr('href')?.split('=').pop());
-          const name = $el.find('.featured-event-tooltip-content').text()
-
-          return {
-            id,
-            name,
-          }
-        })
-    )
-
-  return $('.liveMatch-container')
-    .toArray()
-    .concat($('.upcomingMatch').toArray())
-    .map((el) => {
-      const $el = $(el);
-
-      const id = parseNumber($el.find('.a-reset').attr('href')?.split('/')[2]) ?? 0;
-      const stars = 5 - $el.find('.matchRating i.faded').length
-      const live = $el.find('.matchTime.matchLive').text() === 'LIVE'
-      const title = $el.find('.matchInfoEmpty').text() || undefined
-
-      const date = parseNumber($el.find('.matchTime').attr('data-unix'));
-
-      let team1
-      let team2
-
-      if (!title) {
-        team1 = {
-          name:
-            $el.find('.matchTeamName').first().text() ||
-            $el.find('.team1 .team').text(),
-          id: parseNumber($el.attr('team1')),
-        }
-
-        team2 = {
-          name:
-            $el.find('.matchTeamName').eq(1).text() ||
-            $el.find('.team2 .team').text(),
-          id: parseNumber($el.attr('team2'))
-        }
-      }
-
-      const format = $el.find('.matchMeta').text()
-
-      const eventName = $el.find('.matchEventLogo').attr('title')
-      const event = events.find((x) => x.name === eventName)
-
-      return { id, date, stars, title, team1, team2, format, event, live }
-    })
-}
+  return matches;
+};
 
 export const getMatches =
   (config: HLTVConfig) =>

@@ -9,6 +9,7 @@ const log = (promise: Promise<any>) =>
 //   console.log(res.streams);
 // });.
 // log(new Hltv({requestMethod: 'playwright'}).getMatches())
+log(HLTV.getMatches())
 // log(HLTV.getEvent({ id: 5741 }))
 // log(HLTV.getEvents())
 // log(HLTV.getMatchMapStats({ id: 115827 }))
