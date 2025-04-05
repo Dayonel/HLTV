@@ -21,7 +21,7 @@ export const defaultLoadPage =
         await page.goto(url);
         let html = await page.content();
 
-        if (html.includes('Checking your browser before accessing') || html.includes('Проверка безопасности подключения к сайту')) {
+        if (html.includes('Checking your browser before accessing')) {
           console.log("html Checking your browser before accessing");
           
           await sleep(30000);
@@ -42,4 +42,8 @@ export const defaultConfig: HLTVConfig = {
   httpAgent: defaultAgent,
   loadPage: defaultLoadPage(defaultAgent),
   requestMethod: 'request',
+}
+
+export const CONFIG = {
+  BASE: 'https://www.hltv.org',
 }

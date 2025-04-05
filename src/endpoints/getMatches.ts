@@ -1,6 +1,6 @@
 import cheerio from 'cheerio'
 import { stringify } from 'querystring'
-import { HLTVConfig } from '../config'
+import { CONFIG, HLTVConfig } from '../config'
 import { HLTVScraper } from '../scraper'
 import { Team } from '../shared/Team'
 import { Event } from '../shared/Event'
@@ -61,6 +61,7 @@ interface Match {
   format: string;
   event: EventData | undefined;
   live: boolean;
+  url?: string;
 }
 
 export const parsePage = (html: string): Match[] => {
@@ -89,26 +90,27 @@ export const parsePage = (html: string): Match[] => {
         date = parseNumber($el.find('.match-time [data-unix]').attr('data-unix'));
       }
 
-      // Extract title from .match-title or .match-info-empty.
-      const titleText =
-        $el.find('.match-title').text().trim() ||
-        $el.find('.match-info-empty').text().trim();
-      const title = titleText.length > 0 ? titleText : undefined;
+      const matchUrl = $el.find('.match a').first().attr('href')
+      const title = matchUrl?.split('/').pop()
+      const url = `${CONFIG.BASE}${matchUrl}`
 
-      // If no title is present, extract team information.
-      let team1: Team | undefined = undefined;
-      let team2: Team | undefined = undefined;
-      if (!title) {
-        const team1Name = $el.find('.match-team.team1 .match-teamname').text().trim();
-        const team2Name = $el.find('.match-team.team2 .match-teamname').text().trim();
-        const team1Id = parseNumber($el.attr('data-team1'));
-        const team2Id = parseNumber($el.attr('data-team2'));
-        if (team1Name) {
-          team1 = { name: team1Name, id: team1Id };
-        }
-        if (team2Name) {
-          team2 = { name: team2Name, id: team2Id };
-        }
+      let team1: Team | undefined = undefined
+      let team2: Team | undefined = undefined
+      const team1Name = $el
+        .find('.match-team.team1 .match-teamname')
+        .text()
+        .trim()
+      const team2Name = $el
+        .find('.match-team.team2 .match-teamname')
+        .text()
+        .trim()
+      const team1Id = parseNumber($el.attr('team1'))
+      const team2Id = parseNumber($el.attr('team2'))
+      if (team1Name) {
+        team1 = { name: team1Name, id: team1Id }
+      }
+      if (team2Name) {
+        team2 = { name: team2Name, id: team2Id }
       }
 
       // Extract format information from .match-meta element.
@@ -135,6 +137,7 @@ export const parsePage = (html: string): Match[] => {
         format,
         event,
         live,
+        url
       };
     });
 
@@ -149,11 +152,15 @@ export const getMatches =
     const url = getPageUrl({ eventIds, eventType, filter, teamIds });
 
     const $ = HLTVScraper(
-      await fetchPage(url, config.loadPage)
-    )
+      await fetchPage(url, config.loadPage, true)
+    );
 
-    const matches = parsePage($.html());
-    return matches
+    const matches = parsePage($.html()).filter((f) => f.stars > 0 && f.date && f.event && f.team1 && f.team2);
+    const uniqueMatches = Array.from(
+      new Map(matches.map((item) => [item.id, item])).values()
+    );
+    console.log(uniqueMatches.length, 'matches found');
+    return uniqueMatches;
   }
 
 export const getMatchesConfig = {

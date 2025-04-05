@@ -1,9 +1,11 @@
 import * as cheerio from 'cheerio'
 import { v4 as uuidv4 } from 'uuid'
+import fs from 'fs'
 
 export const fetchPage = async (
   url: string,
-  loadPage: (url: string) => Promise<string>
+  loadPage: (url: string) => Promise<string>,
+  writeToFile: boolean = false
 ): Promise<cheerio.Root> => {
   const root = cheerio.load(await loadPage(url))
 
@@ -17,6 +19,10 @@ export const fetchPage = async (
     throw new Error(
       'Access denied | www.hltv.org used Cloudflare to restrict access'
     )
+  }
+
+  if (writeToFile) {
+    fs.writeFileSync('output.html', html, 'utf-8'); 
   }
 
   return root
